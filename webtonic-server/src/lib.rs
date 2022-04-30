@@ -11,6 +11,7 @@ use core::{
     task::Context,
     task::Poll,
 };
+use std::convert::Infallible;
 use futures::{future, StreamExt};
 use http::{request::Request, response::Response};
 use prost::Message as ProstMessage;
@@ -19,7 +20,6 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tonic::{
     body::{empty_body, BoxBody},
-    codegen::Never,
     transport::NamedService,
     Status,
 };
@@ -97,7 +97,7 @@ impl<A, B> Router<A, B> {
     /// - A new [`Router`](Router), which included the old routes and the new service.
     pub fn add_service<C>(self, service: C) -> Router<C, Route<A, B>>
     where
-        C: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Never>,
+        C: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>,
     {
         Router {
             server: self.server,
@@ -115,14 +115,14 @@ impl<A, B> Router<A, B> {
     pub async fn serve<U>(self, addr: U)
     where
         U: Into<SocketAddr>,
-        A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Never>
+        A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
             + Sync
             + 'static,
         A::Future: Send + 'static,
-        B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Never>
+        B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Infallible>
             + Clone
             + Send
             + Sync
@@ -150,13 +150,13 @@ pub struct Route<A, B>(A, B);
 
 impl<A, B> Service<(String, Request<BoxBody>)> for Route<A, B>
 where
-    A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Never> + NamedService,
+    A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible> + NamedService,
     A::Future: Send + 'static,
-    B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Never>,
+    B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Infallible>,
     B::Future: Send + 'static,
 {
     type Response = Response<BoxBody>;
-    type Error = Never;
+    type Error = Infallible;
     type Future = future::Either<A::Future, B::Future>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -180,7 +180,7 @@ pub struct Unimplemented;
 
 impl Service<(String, Request<BoxBody>)> for Unimplemented {
     type Response = Response<BoxBody>;
-    type Error = Never;
+    type Error = Infallible;
     type Future = future::Ready<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -201,11 +201,11 @@ impl Service<(String, Request<BoxBody>)> for Unimplemented {
 
 async fn handle_connection2<A, B>(ws: WebSocket, routes: Router<A, B>)
 where
-    A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Never>
+    A: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
         + NamedService
         + Clone,
     A::Future: Send + 'static,
-    B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Never> + Clone,
+    B: Service<(String, Request<BoxBody>), Response = Response<BoxBody>, Error = Infallible> + Clone,
     B::Future: Send + 'static,
 {
     log::debug!("opening a new connection");
@@ -269,7 +269,7 @@ where
         let mut response = match routes.root.clone().call((path.to_string(), call)).await {
             Ok(response) => response,
             Err(_e) => {
-                panic!("Tonic services never error");
+                panic!("Tonic services Infallible error");
             }
         };
         log::debug!("got response {:?}", response);
